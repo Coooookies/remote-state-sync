@@ -19,6 +19,7 @@
     "build": "tsup src/index.ts --format esm --dts --clean",
     "prepublishOnly": "npm run lint && npm run test && npm run build",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -36,6 +37,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
+    "@vue/reactivity": "^3.5.28",
     "nanobus": "^4.5.0"
   }
 }
