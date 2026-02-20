@@ -15,6 +15,7 @@ export type SyncUpdater<T> = (state: T) => T | void;
 
 export type SyncBusDefinition = {
   update: (namespace: string, patches: Patch[]) => void;
+  register: (namespace: string) => void;
 };
 
 export type ReceiverItemBusDefinition<T> = {

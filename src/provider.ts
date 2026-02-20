@@ -14,6 +14,7 @@ export class SyncProvider {
     }
     const ns = new SyncNamespaceProvider(namespace, this.bus);
     this.namespaces.set(namespace, ns);
+    this.bus.emit('register', namespace);
     return ns;
   }
 
