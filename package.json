@@ -36,9 +36,11 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "provenance": true,
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "dev": "tsup src/index.ts --watch",
