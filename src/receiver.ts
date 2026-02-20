@@ -1,6 +1,13 @@
 import Nanobus from 'nanobus';
 import { Patch, SyncOptions, ReceiverItemBusDefinition } from './types';
 import { shallowRef, ref, Ref, ShallowRef, triggerRef } from '@vue/reactivity';
+import {
+  navigatePath,
+  setValueAtPath,
+  deleteValueAtPath,
+  addValueToSet,
+  clearValue,
+} from './utils';
 
 export class SyncReceiver {
   private namespaces = new Map<string, SyncNamespaceReceiver>();
@@ -72,30 +79,25 @@ export class SyncNamespaceReceiver {
   }
 
   private applyPatchToObject(obj: unknown, patch: Patch) {
-    let current = obj as Record<string, unknown>;
-    for (let i = 0; i < patch.path.length - 1; i++) {
-      current = current[patch.path[i] as string] as Record<string, unknown>;
-      if (!current) return;
+    if (patch.path.length === 0) return;
+
+    if (patch.op === 'clear' || patch.op === 'add') {
+      const target = navigatePath(obj, patch.path, 0, patch.path.length);
+      if (patch.op === 'clear') {
+        clearValue(target);
+      } else {
+        addValueToSet(target, patch.value);
+      }
+      return;
     }
+
+    const current = navigatePath(obj, patch.path, 0, patch.path.length - 1);
     const lastKey = patch.path[patch.path.length - 1] as string;
+
     if (patch.op === 'set') {
-      current[lastKey] = patch.value;
+      setValueAtPath(current, lastKey, patch.value);
     } else if (patch.op === 'delete') {
-      delete current[lastKey];
-    } else if (patch.op === 'add') {
-      if (current instanceof Set) {
-        current.add(patch.value);
-      }
-    } else if (patch.op === 'clear') {
-      // Technically in our set it clears the whole Set/Map, so current is the object itself at path
-      // For clear, the patch.path is the exact path (not its parent)
-      current = obj as Record<string, unknown>;
-      for (let i = 0; i < patch.path.length; i++) {
-        current = current[patch.path[i] as string] as Record<string, unknown>;
-      }
-      if (current && typeof (current as unknown as Map<unknown, unknown>).clear === 'function') {
-        (current as unknown as Map<unknown, unknown>).clear();
-      }
+      deleteValueAtPath(current, lastKey);
     }
   }
 }
@@ -147,81 +149,52 @@ export class SyncItemReceiver<T> {
     }
 
     // Nested patch
-    let current: unknown = this.value;
-    let refCurrent: unknown = this._ref ? this._ref.value : null;
-
-    // We skip the first element of path, because it is the root key
-    for (let i = 1; i < patch.path.length - 1; i++) {
-      const step = patch.path[i] as string;
-      if (current instanceof Map) {
-        current = current.get(step);
-      } else {
-        current = (current as Record<string, unknown>)[step];
-      }
-      if (refCurrent) {
-        if (refCurrent instanceof Map) {
-          refCurrent = refCurrent.get(step);
-        } else {
-          refCurrent = (refCurrent as Record<string, unknown>)[step];
-        }
-      }
-      if (current === undefined || current === null) return;
-    }
-
-    const lastKey = patch.path[patch.path.length - 1] as string;
+    const lastKey = patch.path[patch.path.length - 1];
 
     if (patch.op === 'set') {
-      if (current instanceof Map) {
-        current.set(lastKey, patch.value);
-        if (refCurrent && refCurrent instanceof Map) refCurrent.set(lastKey, patch.value);
-      } else {
-        (current as Record<string, unknown>)[lastKey] = patch.value;
-        if (refCurrent) (refCurrent as Record<string, unknown>)[lastKey] = patch.value;
-      }
+      const current = navigatePath(this.value, patch.path, 1, patch.path.length - 1);
+      const refCurrent = navigatePath(
+        this._ref ? this._ref.value : null,
+        patch.path,
+        1,
+        patch.path.length - 1,
+      );
+
+      setValueAtPath(current, lastKey, patch.value);
+      setValueAtPath(refCurrent, lastKey, patch.value);
     } else if (patch.op === 'delete') {
-      if (current instanceof Map) {
-        current.delete(lastKey);
-        if (refCurrent && refCurrent instanceof Map) refCurrent.delete(lastKey);
-      } else {
-        delete (current as Record<string, unknown>)[lastKey];
-        if (refCurrent) delete (refCurrent as Record<string, unknown>)[lastKey];
-      }
+      const current = navigatePath(this.value, patch.path, 1, patch.path.length - 1);
+      const refCurrent = navigatePath(
+        this._ref ? this._ref.value : null,
+        patch.path,
+        1,
+        patch.path.length - 1,
+      );
+
+      deleteValueAtPath(current, lastKey);
+      deleteValueAtPath(refCurrent, lastKey);
     } else if (patch.op === 'add') {
-      // "add" is used by Set; its path is the set itself.
-      // E.g. patch.path = ['key', 'nestedSet']
-      current = this.value;
-      refCurrent = this._ref ? this._ref.value : null;
-      for (let i = 1; i < patch.path.length; i++) {
-        if (current instanceof Map) current = current.get(patch.path[i]);
-        else current = (current as Record<string, unknown>)[patch.path[i] as string];
-        if (refCurrent) {
-          if (refCurrent instanceof Map) refCurrent = refCurrent.get(patch.path[i]);
-          else refCurrent = (refCurrent as Record<string, unknown>)[patch.path[i] as string];
-        }
-      }
-      if (current instanceof Set) {
-        current.add(patch.value);
-        if (refCurrent && refCurrent instanceof Set) refCurrent.add(patch.value);
-      }
+      const target = navigatePath(this.value, patch.path, 1, patch.path.length);
+      const refTarget = navigatePath(
+        this._ref ? this._ref.value : null,
+        patch.path,
+        1,
+        patch.path.length,
+      );
+
+      addValueToSet(target, patch.value);
+      addValueToSet(refTarget, patch.value);
     } else if (patch.op === 'clear') {
-      current = this.value;
-      refCurrent = this._ref ? this._ref.value : null;
-      for (let i = 1; i < patch.path.length; i++) {
-        if (current instanceof Map) current = current.get(patch.path[i]);
-        else current = (current as Record<string, unknown>)[patch.path[i] as string];
-        if (refCurrent) {
-          if (refCurrent instanceof Map) refCurrent = refCurrent.get(patch.path[i]);
-          else refCurrent = (refCurrent as Record<string, unknown>)[patch.path[i] as string];
-        }
-      }
-      if (current && typeof (current as unknown as Map<unknown, unknown>).clear === 'function') {
-        (current as unknown as Map<unknown, unknown>).clear();
-        if (
-          refCurrent &&
-          typeof (refCurrent as unknown as Map<unknown, unknown>).clear === 'function'
-        )
-          (refCurrent as unknown as Map<unknown, unknown>).clear();
-      }
+      const target = navigatePath(this.value, patch.path, 1, patch.path.length);
+      const refTarget = navigatePath(
+        this._ref ? this._ref.value : null,
+        patch.path,
+        1,
+        patch.path.length,
+      );
+
+      clearValue(target);
+      clearValue(refTarget);
     }
   }
 

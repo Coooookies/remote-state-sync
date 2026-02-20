@@ -1,17 +1,5 @@
 import { Patch } from './types';
-
-function isObject(val: unknown): val is object {
-  return val !== null && typeof val === 'object';
-}
-
-function shouldProxy(val: unknown): boolean {
-  if (!isObject(val)) return false;
-  // Do not proxy functions, symbols, null, etc.
-  if (typeof val === 'function') return false;
-  if (val instanceof Date) return false;
-  if (val instanceof RegExp) return false;
-  return true;
-}
+import { shouldProxy } from './utils';
 
 export function createDeepProxy<T>(
   target: T,
