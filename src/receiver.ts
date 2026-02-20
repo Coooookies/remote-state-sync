@@ -1,5 +1,5 @@
 import Nanobus from 'nanobus';
-import { Patch, SyncOptions, ReceiverItemBusDefinition } from './types';
+import { Patch, SyncOptions, ReceiverItemBusDefinition, SyncSnapshot } from './types';
 import { shallowRef, ref, Ref, ShallowRef, triggerRef } from '@vue/reactivity';
 import {
   navigatePath,
@@ -8,6 +8,7 @@ import {
   addValueToSet,
   clearValue,
 } from './utils';
+import SuperJSON from 'superjson';
 
 export class SyncReceiver {
   private namespaces = new Map<string, SyncNamespaceReceiver>();
@@ -38,7 +39,7 @@ export class SyncNamespaceReceiver {
 
   constructor(
     public readonly namespace: string,
-    private snapshot: Record<string, unknown>,
+    private snapshot: SyncSnapshot,
   ) {}
 
   public sync<T>(key: string): SyncItemReceiver<T> {
@@ -46,7 +47,8 @@ export class SyncNamespaceReceiver {
       return this.items.get(key) as SyncItemReceiver<T>;
     }
 
-    const val = this.snapshot[key] as T;
+    const snapshot = SuperJSON.deserialize(this.snapshot) as Record<string, unknown>;
+    const val = snapshot[key] as T;
     const item = new SyncItemReceiver<T>(key, val);
     this.items.set(key, item as SyncItemReceiver<unknown>);
     return item;

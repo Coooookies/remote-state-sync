@@ -1,5 +1,6 @@
 import Nanobus from 'nanobus';
-import { Patch, SyncBusDefinition, SyncUpdater } from './types';
+import SuperJSON from 'superjson';
+import { Patch, SyncBusDefinition, SyncSnapshot, SyncUpdater } from './types';
 import { createDeepProxy } from './proxy';
 
 export class SyncProvider {
@@ -18,7 +19,7 @@ export class SyncProvider {
     return ns;
   }
 
-  public async getStateSnapshot(namespace: string): Promise<Record<string, unknown>> {
+  public getStateSnapshot(namespace: string): SyncSnapshot {
     const ns = this.namespaces.get(namespace);
     if (!ns) {
       throw new Error(`Namespace ${namespace} not found`);
@@ -49,12 +50,12 @@ export class SyncNamespaceProvider {
     return item;
   }
 
-  public getSnapshot(): Record<string, unknown> {
+  public getSnapshot(): SyncSnapshot {
     const snapshot: Record<string, unknown> = {};
     for (const [key, item] of this.items.entries()) {
       snapshot[key] = item.toValue();
     }
-    return snapshot;
+    return SuperJSON.serialize(snapshot);
   }
 
   private queuePatch(patch: Patch) {

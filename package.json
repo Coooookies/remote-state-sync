@@ -26,9 +26,11 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -66,6 +68,7 @@
   },
   "dependencies": {
     "@vue/reactivity": "^3.5.28",
-    "nanobus": "^4.5.0"
+    "nanobus": "^4.5.0",
+    "superjson": "^2.2.6"
   }
 }
