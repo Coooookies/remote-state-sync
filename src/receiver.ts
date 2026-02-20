@@ -62,7 +62,7 @@ export class SyncNamespaceReceiver {
         affectedItems.get(item)!.patches.push(patch);
       } else {
         // Update the snapshot in case the item hasn't been synced yet
-        this.applyPatchToObj(this.snapshot, patch);
+        this.applyPatchToObject(this.snapshot, patch);
       }
     }
     for (const [item, data] of affectedItems.entries()) {
@@ -71,7 +71,7 @@ export class SyncNamespaceReceiver {
     }
   }
 
-  private applyPatchToObj(obj: unknown, patch: Patch) {
+  private applyPatchToObject(obj: unknown, patch: Patch) {
     let current = obj as Record<string, unknown>;
     for (let i = 0; i < patch.path.length - 1; i++) {
       current = current[patch.path[i] as string] as Record<string, unknown>;
