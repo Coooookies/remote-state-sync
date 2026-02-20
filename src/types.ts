@@ -2,6 +2,7 @@ export type PatchOperation = 'set' | 'delete' | 'clear' | 'add';
 
 export interface Patch {
   op: PatchOperation;
+  key: string;
   path: (string | number)[];
   value?: unknown;
 }

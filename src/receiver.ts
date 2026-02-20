@@ -58,8 +58,7 @@ export class SyncNamespaceReceiver {
       { oldVal: unknown; patches: Patch[] }
     >();
     for (const patch of patches) {
-      if (patch.path.length === 0) continue;
-      const key = patch.path[0] as string;
+      const key = patch.key as string;
       const item = this.items.get(key);
       if (item) {
         if (!affectedItems.has(item)) {
@@ -79,10 +78,10 @@ export class SyncNamespaceReceiver {
   }
 
   private applyPatchToObject(obj: unknown, patch: Patch) {
-    if (patch.path.length === 0) return;
+    const fullPath = [patch.key as string, ...patch.path];
 
     if (patch.op === 'clear' || patch.op === 'add') {
-      const target = navigatePath(obj, patch.path, 0, patch.path.length);
+      const target = navigatePath(obj, fullPath, 0, fullPath.length);
       if (patch.op === 'clear') {
         clearValue(target);
       } else {
@@ -91,8 +90,8 @@ export class SyncNamespaceReceiver {
       return;
     }
 
-    const current = navigatePath(obj, patch.path, 0, patch.path.length - 1);
-    const lastKey = patch.path[patch.path.length - 1] as string;
+    const current = navigatePath(obj, fullPath, 0, fullPath.length - 1);
+    const lastKey = fullPath[fullPath.length - 1] as string;
 
     if (patch.op === 'set') {
       setValueAtPath(current, lastKey, patch.value);
@@ -138,7 +137,7 @@ export class SyncItemReceiver<T> {
   }
 
   public applyPatch(patch: Patch): void {
-    if (patch.path.length === 1) {
+    if (patch.path.length === 0) {
       // Root level patch (e.g. key replacement)
       if (patch.op === 'set') {
         this.value = patch.value as T;
@@ -149,47 +148,47 @@ export class SyncItemReceiver<T> {
     }
 
     // Nested patch
-    const lastKey = patch.path[patch.path.length - 1];
+    const lastKey = patch.path[patch.path.length - 1] as string | number;
 
     if (patch.op === 'set') {
-      const current = navigatePath(this.value, patch.path, 1, patch.path.length - 1);
+      const current = navigatePath(this.value, patch.path, 0, patch.path.length - 1);
       const refCurrent = navigatePath(
         this._ref ? this._ref.value : null,
         patch.path,
-        1,
+        0,
         patch.path.length - 1,
       );
 
       setValueAtPath(current, lastKey, patch.value);
       setValueAtPath(refCurrent, lastKey, patch.value);
     } else if (patch.op === 'delete') {
-      const current = navigatePath(this.value, patch.path, 1, patch.path.length - 1);
+      const current = navigatePath(this.value, patch.path, 0, patch.path.length - 1);
       const refCurrent = navigatePath(
         this._ref ? this._ref.value : null,
         patch.path,
-        1,
+        0,
         patch.path.length - 1,
       );
 
       deleteValueAtPath(current, lastKey);
       deleteValueAtPath(refCurrent, lastKey);
     } else if (patch.op === 'add') {
-      const target = navigatePath(this.value, patch.path, 1, patch.path.length);
+      const target = navigatePath(this.value, patch.path, 0, patch.path.length);
       const refTarget = navigatePath(
         this._ref ? this._ref.value : null,
         patch.path,
-        1,
+        0,
         patch.path.length,
       );
 
       addValueToSet(target, patch.value);
       addValueToSet(refTarget, patch.value);
     } else if (patch.op === 'clear') {
-      const target = navigatePath(this.value, patch.path, 1, patch.path.length);
+      const target = navigatePath(this.value, patch.path, 0, patch.path.length);
       const refTarget = navigatePath(
         this._ref ? this._ref.value : null,
         patch.path,
-        1,
+        0,
         patch.path.length,
       );
 

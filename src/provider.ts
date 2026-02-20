@@ -110,11 +110,12 @@ export class SyncItemProvider<T> {
     // If it's a replacement of the entire value, emit a root set patch
     this.onPatch({
       op: 'set',
-      path: [this.key],
+      key: this.key,
+      path: [],
       value: newVal,
     });
 
     // We proxy it so deep modifications trigger patches
-    this.value = createDeepProxy(newVal, [this.key], this.onPatch);
+    this.value = createDeepProxy(newVal, this.key, [], this.onPatch);
   }
 }

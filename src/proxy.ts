@@ -3,6 +3,7 @@ import { shouldProxy } from './utils';
 
 export function createDeepProxy<T>(
   target: T,
+  rootKey: string,
   path: (string | number)[],
   onPatch: (patch: Patch) => void,
 ): T {
@@ -11,18 +12,19 @@ export function createDeepProxy<T>(
   }
 
   if (target instanceof Map) {
-    return createMapProxy(target, path, onPatch) as T;
+    return createMapProxy(target, rootKey, path, onPatch) as T;
   }
 
   if (target instanceof Set) {
-    return createSetProxy(target, path, onPatch) as T;
+    return createSetProxy(target, rootKey, path, onPatch) as T;
   }
 
-  return createObjectProxy(target as object, path, onPatch) as T;
+  return createObjectProxy(target as object, rootKey, path, onPatch) as T;
 }
 
 function createObjectProxy<T extends object>(
   target: T,
+  rootKey: string,
   path: (string | number)[],
   onPatch: (patch: Patch) => void,
 ): T {
@@ -35,7 +37,7 @@ function createObjectProxy<T extends object>(
       }
 
       if (shouldProxy(value)) {
-        return createDeepProxy(value, [...path, prop], onPatch);
+        return createDeepProxy(value, rootKey, [...path, prop], onPatch);
       }
 
       return value;
@@ -50,6 +52,7 @@ function createObjectProxy<T extends object>(
       if (success) {
         onPatch({
           op: 'set',
+          key: rootKey,
           path: [...path, prop],
           value,
         });
@@ -66,6 +69,7 @@ function createObjectProxy<T extends object>(
       if (success) {
         onPatch({
           op: 'delete',
+          key: rootKey,
           path: [...path, prop],
         });
       }
@@ -78,6 +82,7 @@ function createObjectProxy<T extends object>(
 
 function createMapProxy<K, V>(
   target: Map<K, V>,
+  rootKey: string,
   path: (string | number)[],
   onPatch: (patch: Patch) => void,
 ): Map<K, V> {
@@ -94,6 +99,7 @@ function createMapProxy<K, V>(
             const result = obj.set(key, val);
             onPatch({
               op: 'set',
+              key: rootKey,
               path: [...path, key as string | number],
               value: val,
             });
@@ -107,6 +113,7 @@ function createMapProxy<K, V>(
             if (hasKey) {
               onPatch({
                 op: 'delete',
+                key: rootKey,
                 path: [...path, key as string | number],
               });
             }
@@ -119,6 +126,7 @@ function createMapProxy<K, V>(
               const result = obj.clear();
               onPatch({
                 op: 'clear',
+                key: rootKey,
                 path: path,
               });
               return result;
@@ -129,7 +137,7 @@ function createMapProxy<K, V>(
           return function (key: K) {
             const getVal = obj.get(key);
             if (shouldProxy(getVal)) {
-              return createDeepProxy(getVal, [...path, key as string | number], onPatch);
+              return createDeepProxy(getVal, rootKey, [...path, key as string | number], onPatch);
             }
             return getVal;
           };
@@ -147,6 +155,7 @@ function createMapProxy<K, V>(
 
 function createSetProxy<T>(
   target: Set<T>,
+  rootKey: string,
   path: (string | number)[],
   onPatch: (patch: Patch) => void,
 ): Set<T> {
@@ -165,6 +174,7 @@ function createSetProxy<T>(
             if (!hasVal) {
               onPatch({
                 op: 'add',
+                key: rootKey,
                 // For set, we don't have a key to navigate, but we can pass the value
                 // In a true Sync scenario, Set diffing is tricky. Path is just the Set itself.
                 path: path,
@@ -181,6 +191,7 @@ function createSetProxy<T>(
             if (hasVal) {
               onPatch({
                 op: 'delete',
+                key: rootKey,
                 path: path, // Similarly, deleting from set happens at Set boundary
                 value: val, // use value to identify what to delete
               });
@@ -194,6 +205,7 @@ function createSetProxy<T>(
               const result = obj.clear();
               onPatch({
                 op: 'clear',
+                key: rootKey,
                 path: path,
               });
               return result;
