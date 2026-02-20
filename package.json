@@ -12,6 +12,15 @@
     "name": "Coooookies",
     "email": "admin@mitay.net"
   },
+  "keywords": [
+    "remote",
+    "state",
+    "sync",
+    "typescript",
+    "electron",
+    "state-management",
+    "ipc"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
