@@ -1,4 +1,5 @@
-import { Patch, SyncOptions } from './types';
+import Nanobus from 'nanobus';
+import { Patch, SyncOptions, ReceiverItemBusDefinition } from './types';
 import { shallowRef, ref, Ref, ShallowRef, triggerRef } from '@vue/reactivity';
 
 export class SyncReceiver {
@@ -45,21 +46,28 @@ export class SyncNamespaceReceiver {
   }
 
   public applyPatches(patches: Patch[]): void {
-    const affectedItems = new Set<SyncItemReceiver<unknown>>();
+    const affectedItems = new Map<
+      SyncItemReceiver<unknown>,
+      { oldVal: unknown; patches: Patch[] }
+    >();
     for (const patch of patches) {
       if (patch.path.length === 0) continue;
       const key = patch.path[0] as string;
       const item = this.items.get(key);
       if (item) {
+        if (!affectedItems.has(item)) {
+          affectedItems.set(item, { oldVal: item.toValue(), patches: [] });
+        }
         item.applyPatch(patch);
-        affectedItems.add(item);
+        affectedItems.get(item)!.patches.push(patch);
       } else {
         // Update the snapshot in case the item hasn't been synced yet
         this.applyPatchToObj(this.snapshot, patch);
       }
     }
-    for (const item of affectedItems) {
+    for (const [item, data] of affectedItems.entries()) {
       item.triggerReactivity();
+      item.bus.emit('update', item.toValue(), data.oldVal, data.patches);
     }
   }
 
@@ -96,12 +104,17 @@ export class SyncItemReceiver<T> {
   private value: T;
   private _ref: Ref<T> | null = null;
   private _shallowRef: ShallowRef<T> | null = null;
+  public bus = new Nanobus<ReceiverItemBusDefinition<T>>('SyncItemReceiver');
 
   constructor(
     public readonly key: string,
     initialValue: T,
   ) {
     this.value = initialValue;
+  }
+
+  public on(event: 'update', cb: (newValue: T, oldValue: T, patches: Patch[]) => void): void {
+    this.bus.on(event, cb);
   }
 
   public toValue(): T {
