@@ -105,7 +105,7 @@ export class SyncItemReceiver<T> {
   private value: T;
   private _ref: Ref<T> | null = null;
   private _shallowRef: ShallowRef<T> | null = null;
-  public bus = new Nanobus<ReceiverItemBusDefinition<T>>('SyncItemReceiver');
+  public readonly bus = new Nanobus<ReceiverItemBusDefinition<T>>('SyncItemReceiver');
 
   constructor(
     public readonly key: string,

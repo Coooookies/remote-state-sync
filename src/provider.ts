@@ -4,7 +4,7 @@ import { createDeepProxy } from './proxy';
 
 export class SyncProvider {
   private namespaces = new Map<string, SyncNamespaceProvider>();
-  public bus = new Nanobus<SyncBusDefinition>('SyncProvider');
+  public readonly bus = new Nanobus<SyncBusDefinition>('SyncProvider');
 
   constructor() {}
 
