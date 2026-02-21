@@ -24,7 +24,7 @@ export class SyncReceiver {
 
   constructor(private options: SyncOptions) {}
 
-  public async register(namespace: string): Promise<SyncNamespaceReceiver> {
+  public register(namespace: string): SyncNamespaceReceiver {
     if (this.namespaces.has(namespace)) {
       return this.namespaces.get(namespace)!;
     }
