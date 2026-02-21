@@ -1,5 +1,5 @@
-import { Patch } from './types';
 import { shouldProxy } from './utils';
+import type { Patch } from './types';
 
 export function createDeepProxy<T>(
   target: T,

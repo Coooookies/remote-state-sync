@@ -10,7 +10,7 @@ export interface Patch {
 }
 
 export interface SyncOptions {
-  snapshotGetter: (namespace: string) => Promise<SyncSnapshot>;
+  snapshotGetter: (namespace: string, key: string) => Promise<SyncStateSnapshot>;
 }
 
 export type SyncUpdater<T> = (state: T) => T | void;
@@ -24,4 +24,4 @@ export type ReceiverItemBusDefinition<T> = {
   update: (newValue: T, oldValue: T, patches: Patch[]) => void;
 };
 
-export type SyncSnapshot = SuperJSONResult;
+export type SyncStateSnapshot = SuperJSONResult;
