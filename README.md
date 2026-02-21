@@ -48,9 +48,10 @@ const userState = usersNs.sync<UserState>('data', {
 });
 
 // 1. snapshotGetter implementation via HTTP endpoint
-app.get('/snapshot/:namespace', (c) => {
+app.get('/snapshot/:namespace/:key', (c) => {
   const ns = c.req.param('namespace');
-  return c.json(provider.getStateSnapshot(ns));
+  const key = c.req.param('key');
+  return c.json(provider.getStateSnapshot(ns, key));
 });
 
 io.on('connection', (socket) => {
@@ -78,8 +79,8 @@ const socket = io('ws://localhost:3000');
 
 const receiver = new SyncReceiver({
   // 1. Fetch the initial snapshot over HTTP
-  snapshotGetter: async (namespace) => {
-    const res = await fetch(`http://localhost:3000/snapshot/${namespace}`);
+  snapshotGetter: async (namespace, key) => {
+    const res = await fetch(`http://localhost:3000/snapshot/${namespace}/${key}`);
     return res.json();
   },
 });
@@ -93,7 +94,7 @@ async function main() {
   const usersNs = await receiver.register('users_space');
 
   type UserState = { connected: number; history: string[] };
-  const userState = usersNs.sync<UserState>('data');
+  const userState = await usersNs.sync<UserState>('data');
 
   // Output: { connected: 1, history: [] }
   console.log(userState.toValue());
@@ -129,8 +130,8 @@ const settings = appNs.sync<SettingsState>('settings', {
 });
 
 // 1. snapshotGetter via ipcMain.handle
-ipcMain.handle('get-sync-snapshot', (_, namespace) => {
-  return provider.getStateSnapshot(namespace);
+ipcMain.handle('get-sync-snapshot', (_, namespace, key) => {
+  return provider.getStateSnapshot(namespace, key);
 });
 
 // 2. Broadcast patches to all renderer windows
@@ -155,7 +156,7 @@ import { watch } from 'vue';
 
 const receiver = new SyncReceiver({
   // 1. Fetch the snapshot via ipcRenderer.invoke
-  snapshotGetter: (namespace) => ipcRenderer.invoke('get-sync-snapshot', namespace),
+  snapshotGetter: (namespace, key) => ipcRenderer.invoke('get-sync-snapshot', namespace, key),
 });
 
 // 2. Listen for patches from Main process
@@ -165,7 +166,7 @@ ipcRenderer.on('sync-update', (_, namespace, patches) => {
 
 async function setup() {
   const appNs = await receiver.register('app_ns');
-  const settings = appNs.sync<SettingsState>('settings');
+  const settings = await appNs.sync<SettingsState>('settings');
 
   // Vue Reactivity directly tied to the remote state!
   const settingsRef = settings.toRef();

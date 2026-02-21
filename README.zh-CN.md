@@ -49,9 +49,10 @@ const userState = usersNs.sync<UserState>('data', {
 
 // 第一步：利用 Hono 提供 HTTP 接口
 // 向客户端暴露 Snapshot
-app.get('/snapshot/:namespace', (c) => {
+app.get('/snapshot/:namespace/:key', (c) => {
   const ns = c.req.param('namespace');
-  return c.json(provider.getStateSnapshot(ns));
+  const key = c.req.param('key');
+  return c.json(provider.getStateSnapshot(ns, key));
 });
 
 io.on('connection', (socket) => {
@@ -77,21 +78,24 @@ import { io } from 'socket.io-client';
 
 const socket = io('ws://localhost:3000');
 
-// 第一步：通过 HTTP 拉取远端快照，作为初始化状态
-snapshotGetter: (async (namespace) => {
-  const res = await fetch(`http://localhost:3000/snapshot/${namespace}`);
-  return res.json();
-},
-  // 第二步：接管增量 Patches，增量更新本地状态树
-  socket.on('state-update', (namespace, patches) => {
-    receiver.applyPatches(namespace, patches);
-  }));
+const receiver = new SyncReceiver({
+  // 第一步：通过 HTTP 拉取远端快照，作为初始化状态
+  snapshotGetter: async (namespace, key) => {
+    const res = await fetch(`http://localhost:3000/snapshot/${namespace}/${key}`);
+    return res.json();
+  },
+});
+
+// 第二步：接管增量 Patches，增量更新本地状态树
+socket.on('state-update', (namespace, patches) => {
+  receiver.applyPatches(namespace, patches);
+});
 
 async function main() {
   const usersNs = await receiver.register('users_space');
 
   type UserState = { connected: number; history: string[] };
-  const userState = usersNs.sync<UserState>('data');
+  const userState = await usersNs.sync<UserState>('data');
 
   // Output: { connected: 1, history: [] }
   console.log(userState.toValue());
@@ -126,8 +130,8 @@ const settings = appNs.sync<SettingsState>('settings', {
 });
 
 // 第一步：通过 ipcMain.handle 暴露 snapshot 获取能力
-ipcMain.handle('get-sync-snapshot', (_, namespace) => {
-  return provider.getStateSnapshot(namespace);
+ipcMain.handle('get-sync-snapshot', (_, namespace, key) => {
+  return provider.getStateSnapshot(namespace, key);
 });
 
 // 第二步：将状态补丁通过 ipcEvent 主动投递给所有渲染进程
@@ -152,7 +156,7 @@ import { watch } from 'vue';
 
 const receiver = new SyncReceiver({
   // 第一步：利用 ipcRenderer.invoke 异步请求 Snapshot
-  snapshotGetter: (namespace) => ipcRenderer.invoke('get-sync-snapshot', namespace),
+  snapshotGetter: (namespace, key) => ipcRenderer.invoke('get-sync-snapshot', namespace, key),
 });
 
 // 第二步：监听来自主进程投递的 Patches
@@ -162,7 +166,7 @@ ipcRenderer.on('sync-update', (_, namespace, patches) => {
 
 async function setup() {
   const appNs = await receiver.register('app_ns');
-  const settings = appNs.sync<SettingsState>('settings');
+  const settings = await appNs.sync<SettingsState>('settings');
 
   // 第三步：将远端状态一键接入 Vue 的响应式生态内！
   const settingsRef = settings.toRef(); // 或 toShallowRef()
