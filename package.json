@@ -1,6 +1,6 @@
 {
   "name": "remote-state-sync",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A lightweight, fully type-safe unidirectional remote state synchronization library.",
   "type": "module",
   "repository": {
