@@ -8,7 +8,7 @@ describe('Remote State Sync - Edge Cases', () => {
     const val1 = test1.sync<number>('val', 0);
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
 
     let updateCalls = 0;
@@ -18,7 +18,7 @@ describe('Remote State Sync - Edge Cases', () => {
     });
 
     const test2 = await receiver.register('rapid_ns');
-    const val2 = test2.sync<number>('val');
+    const val2 = await test2.sync<number>('val');
 
     // rapid synchronous mutations loop
     for (let i = 1; i <= 1000; i++) {
@@ -30,7 +30,7 @@ describe('Remote State Sync - Edge Cases', () => {
 
     // It should have been batched into a single (or very few depending on event loop) emit
     expect(updateCalls).toBe(1);
-    expect(val2.toValue()).toBe(1000);
+    expect(val2.raw).toBe(1000);
   });
 
   it('should handle Arrays as objects natively', async () => {
@@ -39,26 +39,34 @@ describe('Remote State Sync - Edge Cases', () => {
     const arr1 = test1.sync<number[]>('arr', [1, 2, 3]);
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
     provider.bus.on('update', (ns, patches) => receiver.applyPatches(ns, patches));
 
     const test2 = await receiver.register('array_ns');
-    const arr2 = test2.sync<number[]>('arr');
+    const arr2 = await test2.sync<number[]>('arr');
 
-    const targetArr = arr1.toValue();
-    targetArr.push(4); // proxy triggers: get push, get length, set 3 -> 4, set length -> 4
-
-    await new Promise((r) => setTimeout(r, 10));
-
-    expect(arr2.toValue().length).toBe(4);
-    expect(arr2.toValue()[3]).toBe(4);
-
-    targetArr.splice(1, 1); // remove index 1
+    // const targetArr = arr1.raw;
+    // targetArr.push(4);
+    arr1.set((arr) => {
+      arr.push(4);
+    });
+    // // proxy triggers: get push, get length, set 3 -> 4, set length -> 4
 
     await new Promise((r) => setTimeout(r, 10));
-    expect(arr2.toValue().length).toBe(3);
-    expect(arr2.toValue()).toEqual([1, 3, 4]);
+
+    expect(arr2.raw.length).toBe(4);
+    expect(arr2.raw[3]).toBe(4);
+
+    // targetArr.splice(1, 1);
+    arr1.set((arr) => {
+      arr.splice(1, 1);
+    });
+    // // remove index 1
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(arr2.raw.length).toBe(3);
+    expect(arr2.raw).toEqual([1, 3, 4]);
   });
 
   it('should safely handle Map inside Set inside Object', async () => {
@@ -72,15 +80,15 @@ describe('Remote State Sync - Edge Cases', () => {
     const complex1 = test1.sync<ComplexState>('state', initialState);
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
     provider.bus.on('update', (ns, patches) => receiver.applyPatches(ns, patches));
 
     const test2 = await receiver.register('nested_complex_ns');
-    const complex2 = test2.sync<ComplexState>('state');
+    const complex2 = await test2.sync<ComplexState>('state');
 
     // get the map inside the set inside the object
-    const val1 = complex1.toValue();
+    const val1 = complex1.raw;
     const innerSet = val1.items;
 
     // iterate set to get the map proxy
@@ -94,7 +102,7 @@ describe('Remote State Sync - Edge Cases', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     let receiverMap!: Map<string, unknown>;
-    for (const m of complex2.toValue().items as unknown as Set<Map<string, unknown>>) {
+    for (const m of complex2.raw.items as unknown as Set<Map<string, unknown>>) {
       receiverMap = m;
     }
 
@@ -111,25 +119,28 @@ describe('Remote State Sync - Edge Cases', () => {
     const data1 = test1.sync<Data>('data', { date: dateObj, rx: /test/g });
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
     provider.bus.on('update', (ns, patches) => receiver.applyPatches(ns, patches));
 
     const test2 = await receiver.register('unproxyable_ns');
-    const data2 = test2.sync<Data>('data');
+    const data2 = await test2.sync<Data>('data');
 
     // These should be completely passed by reference because shouldProxy returned false
     // Mutating a date will not trigger patches
-    const val1 = data1.toValue();
+    const val1 = data1.raw;
     val1.date.setFullYear(2050);
 
     // Wait. Since Date is passed by ref in snapshot sharing memory, the date will be mutated for receiver too,
     // but no proxy event is fired.
 
     // Let's replace the reference instead
-    val1.rx = /new/g;
+    // val1.rx = /new/g;
+    data1.set((data) => {
+      data.rx = /new/g;
+    });
 
     await new Promise((r) => setTimeout(r, 10));
-    expect(data2.toValue().rx.source).toBe('new');
+    expect(data2.raw.rx.source).toBe('new');
   });
 });

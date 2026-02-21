@@ -11,7 +11,7 @@ describe('Remote State Sync', () => {
     const bool1 = test1.sync<boolean>('bool', true);
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
 
     provider.bus.on('update', (ns, patches) => {
@@ -19,13 +19,13 @@ describe('Remote State Sync', () => {
     });
 
     const test2 = await receiver.register('test_namespace');
-    const hi2 = test2.sync<number>('hi');
-    const str2 = test2.sync<string>('str');
-    const bool2 = test2.sync<boolean>('bool');
+    const hi2 = await test2.sync<number>('hi');
+    const str2 = await test2.sync<string>('str');
+    const bool2 = await test2.sync<boolean>('bool');
 
-    expect(hi2.toValue()).toBe(1);
-    expect(str2.toValue()).toBe('hello');
-    expect(bool2.toValue()).toBe(true);
+    expect(hi2.raw).toBe(1);
+    expect(str2.raw).toBe('hello');
+    expect(bool2.raw).toBe(true);
 
     hi1.set(2);
     str1.set('world');
@@ -33,14 +33,14 @@ describe('Remote State Sync', () => {
 
     await new Promise((r) => setTimeout(r, 10)); // allow nanobus async emit
 
-    expect(hi2.toValue()).toBe(2);
-    expect(str2.toValue()).toBe('world');
-    expect(bool2.toValue()).toBe(false);
+    expect(hi2.raw).toBe(2);
+    expect(str2.raw).toBe('world');
+    expect(bool2.raw).toBe(false);
 
     // Test updater function
     hi1.set((prev) => prev + 1);
     await new Promise((r) => setTimeout(r, 10));
-    expect(hi2.toValue()).toBe(3);
+    expect(hi2.raw).toBe(3);
   });
 
   it('should sync objects', async () => {
@@ -54,7 +54,7 @@ describe('Remote State Sync', () => {
     const hello1 = test1.sync<Hello>('hello', { echo: 'world' });
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
 
     provider.bus.on('update', (ns, patches) => {
@@ -62,9 +62,9 @@ describe('Remote State Sync', () => {
     });
 
     const test2 = await receiver.register('obj_ns');
-    const hello2 = test2.sync<Hello>('hello');
+    const hello2 = await test2.sync<Hello>('hello');
 
-    expect(hello2.toValue().echo).toBe('world');
+    expect(hello2.raw.echo).toBe('world');
 
     // object mutation test
     hello1.set((state) => {
@@ -73,17 +73,17 @@ describe('Remote State Sync', () => {
     });
 
     await new Promise((r) => setTimeout(r, 10));
-    expect(hello2.toValue().echo).toBe('world1');
-    expect(hello2.toValue().deep?.value).toBe(42);
+    expect(hello2.raw.echo).toBe('world1');
+    expect(hello2.raw.deep?.value).toBe(42);
 
     // proxy deep mutation test
-    const val = hello1.toValue();
+    const val = hello1.raw;
     if (val.deep) {
       val.deep.value = 43;
     }
 
     await new Promise((r) => setTimeout(r, 10));
-    expect(hello2.toValue().deep?.value).toBe(43);
+    expect(hello2.raw.deep?.value).toBe(43);
 
     // delete property
     hello1.set((state) => {
@@ -91,6 +91,6 @@ describe('Remote State Sync', () => {
     });
 
     await new Promise((r) => setTimeout(r, 10));
-    expect(hello2.toValue().deep).toBeUndefined();
+    expect(hello2.raw.deep).toBeUndefined();
   });
 });

@@ -12,7 +12,7 @@ describe('Remote State Sync - Reactivity', () => {
     const obj1 = test1.sync<{ count: number }>('obj', { count: 0 });
 
     const receiver = new SyncReceiver({
-      snapshotGetter: async (ns) => provider.getStateSnapshot(ns),
+      snapshotGetter: async (ns, key) => provider.getStateSnapshot(ns, key),
     });
 
     provider.bus.on('update', (ns, patches) => {
@@ -20,8 +20,8 @@ describe('Remote State Sync - Reactivity', () => {
     });
 
     const test2 = await receiver.register('vue_ns');
-    const hi2 = test2.sync<number>('hi');
-    const obj2 = test2.sync<{ count: number }>('obj');
+    const hi2 = await test2.sync<number>('hi');
+    const obj2 = await test2.sync<{ count: number }>('obj');
 
     let primitiveRuns = 0;
     let pval = 0;
@@ -43,7 +43,9 @@ describe('Remote State Sync - Reactivity', () => {
     expect(objval).toBe(0);
 
     hi1.set(2);
-    obj1.toValue().count = 1;
+    obj1.set((state) => {
+      state.count = 1;
+    });
 
     await new Promise((r) => setTimeout(r, 10));
 
@@ -52,7 +54,7 @@ describe('Remote State Sync - Reactivity', () => {
     expect(pval).toBe(2);
 
     // shallow ref + triggerRef triggers the whole ref to re-evaluate dependencies.
-    // Setting `obj1.toValue().count` is 2 operations internally (get + set) and our patches
+    // Setting `obj1.raw.count` is 2 operations internally (get + set) and our patches
     // trigger triggerReactivity() multiple times based on patches applied. Just ensure it ran
     // at least twice.
     expect(shallowObjRuns).toBeGreaterThanOrEqual(2);
