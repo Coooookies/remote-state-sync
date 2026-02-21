@@ -1,14 +1,23 @@
 import Nanobus from 'nanobus';
-import { Patch, SyncOptions, ReceiverItemBusDefinition, SyncSnapshot } from './types';
-import { shallowRef, ref, Ref, ShallowRef, triggerRef } from '@vue/reactivity';
+import SuperJSON from 'superjson';
+import {
+  shallowRef,
+  ref,
+  type Ref,
+  type ShallowRef,
+  triggerRef,
+  readonly,
+  type DeepReadonly,
+} from '@vue/reactivity';
 import {
   navigatePath,
   setValueAtPath,
   deleteValueAtPath,
   addValueToSet,
   clearValue,
+  deepStructureClone,
 } from './utils';
-import SuperJSON from 'superjson';
+import type { Patch, SyncOptions, ReceiverItemBusDefinition, SyncStateSnapshot } from './types';
 
 export class SyncReceiver {
   private namespaces = new Map<string, SyncNamespaceReceiver>();
@@ -20,8 +29,7 @@ export class SyncReceiver {
       return this.namespaces.get(namespace)!;
     }
 
-    const snapshot = await this.options.snapshotGetter(namespace);
-    const ns = new SyncNamespaceReceiver(namespace, snapshot);
+    const ns = new SyncNamespaceReceiver(namespace, this.options.snapshotGetter);
     this.namespaces.set(namespace, ns);
     return ns;
   }
@@ -39,16 +47,16 @@ export class SyncNamespaceReceiver {
 
   constructor(
     public readonly namespace: string,
-    private snapshot: SyncSnapshot,
+    private snapshotGetter: (namespace: string, key: string) => Promise<SyncStateSnapshot>,
   ) {}
 
-  public sync<T>(key: string): SyncItemReceiver<T> {
+  public async sync<T>(key: string): Promise<SyncItemReceiver<T>> {
     if (this.items.has(key)) {
       return this.items.get(key) as SyncItemReceiver<T>;
     }
 
-    const snapshot = SuperJSON.deserialize(this.snapshot) as Record<string, unknown>;
-    const val = snapshot[key] as T;
+    const snapshot = await this.snapshotGetter(this.namespace, key);
+    const val = SuperJSON.deserialize<T>(snapshot);
     const item = new SyncItemReceiver<T>(key, val);
     this.items.set(key, item as SyncItemReceiver<unknown>);
     return item;
@@ -64,50 +72,24 @@ export class SyncNamespaceReceiver {
       const item = this.items.get(key);
       if (item) {
         if (!affectedItems.has(item)) {
-          affectedItems.set(item, { oldVal: item.toValue(), patches: [] });
+          affectedItems.set(item, { oldVal: item.raw, patches: [] });
         }
         item.applyPatch(patch);
         affectedItems.get(item)!.patches.push(patch);
-      } else {
-        // Update the snapshot in case the item hasn't been synced yet
-        this.applyPatchToObject(this.snapshot, patch);
       }
     }
     for (const [item, data] of affectedItems.entries()) {
       item.triggerReactivity();
-      item.bus.emit('update', item.toValue(), data.oldVal, data.patches);
-    }
-  }
-
-  private applyPatchToObject(obj: unknown, patch: Patch) {
-    const fullPath = [patch.key as string, ...patch.path];
-
-    if (patch.op === 'clear' || patch.op === 'add') {
-      const target = navigatePath(obj, fullPath, 0, fullPath.length);
-      if (patch.op === 'clear') {
-        clearValue(target);
-      } else {
-        addValueToSet(target, patch.value);
-      }
-      return;
-    }
-
-    const current = navigatePath(obj, fullPath, 0, fullPath.length - 1);
-    const lastKey = fullPath[fullPath.length - 1] as string;
-
-    if (patch.op === 'set') {
-      setValueAtPath(current, lastKey, patch.value);
-    } else if (patch.op === 'delete') {
-      deleteValueAtPath(current, lastKey);
+      item.bus.emit('update', item.raw, data.oldVal, data.patches);
     }
   }
 }
 
 export class SyncItemReceiver<T> {
+  public readonly bus = new Nanobus<ReceiverItemBusDefinition<T>>('SyncItemReceiver');
   private value: T;
   private _ref: Ref<T> | null = null;
   private _shallowRef: ShallowRef<T> | null = null;
-  public readonly bus = new Nanobus<ReceiverItemBusDefinition<T>>('SyncItemReceiver');
 
   constructor(
     public readonly key: string,
@@ -116,26 +98,22 @@ export class SyncItemReceiver<T> {
     this.value = initialValue;
   }
 
-  public on(event: 'update', cb: (newValue: T, oldValue: T, patches: Patch[]) => void): void {
-    this.bus.on(event, cb);
-  }
-
-  public toValue(): T {
+  public get raw(): Readonly<T> {
     return this.value;
   }
 
-  public toRef(): Ref<T> {
+  public toRef(): Readonly<Ref<DeepReadonly<T>>> {
     if (!this._ref) {
-      this._ref = ref(this.value) as Ref<T>;
+      this._ref = ref(deepStructureClone(this.value)) as Ref<T>;
     }
-    return this._ref;
+    return readonly(this._ref);
   }
 
-  public toShallowRef(): ShallowRef<T> {
+  public toShallowRef(): Readonly<ShallowRef<DeepReadonly<T>>> {
     if (!this._shallowRef) {
       this._shallowRef = shallowRef(this.value) as ShallowRef<T>;
     }
-    return this._shallowRef;
+    return readonly(this._shallowRef);
   }
 
   public applyPatch(patch: Patch): void {
@@ -203,13 +181,5 @@ export class SyncItemReceiver<T> {
     if (this._shallowRef) {
       triggerRef(this._shallowRef);
     }
-    // ref deeply tracks automatically for some mutations, but just to be sure we trigger.
-    // However triggerRef doesn't work perfectly on plain refs in all edge cases if internal nested structures are replaced directly
-    // For typical vue usage map/set mutating works fine.
-  }
-
-  public dispose() {
-    this._ref = null;
-    this._shallowRef = null;
   }
 }

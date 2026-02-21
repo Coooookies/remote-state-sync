@@ -1,11 +1,11 @@
 import Nanobus from 'nanobus';
 import SuperJSON from 'superjson';
-import { Patch, SyncBusDefinition, SyncSnapshot, SyncUpdater } from './types';
 import { createDeepProxy } from './proxy';
+import type { Patch, SyncBusDefinition, SyncStateSnapshot, SyncUpdater } from './types';
 
 export class SyncProvider {
-  private namespaces = new Map<string, SyncNamespaceProvider>();
   public readonly bus = new Nanobus<SyncBusDefinition>('SyncProvider');
+  private namespaces = new Map<string, SyncNamespaceProvider>();
 
   constructor() {}
 
@@ -19,12 +19,12 @@ export class SyncProvider {
     return ns;
   }
 
-  public getStateSnapshot(namespace: string): SyncSnapshot {
+  public getStateSnapshot(namespace: string, key: string): SyncStateSnapshot {
     const ns = this.namespaces.get(namespace);
     if (!ns) {
       throw new Error(`Namespace ${namespace} not found`);
     }
-    return ns.getSnapshot();
+    return ns.getSnapshot(key);
   }
 }
 
@@ -50,12 +50,12 @@ export class SyncNamespaceProvider {
     return item;
   }
 
-  public getSnapshot(): SyncSnapshot {
-    const snapshot: Record<string, unknown> = {};
-    for (const [key, item] of this.items.entries()) {
-      snapshot[key] = item.toValue();
+  public getSnapshot(key: string): SyncStateSnapshot {
+    const item = this.items.get(key);
+    if (!item) {
+      throw new Error(`Item ${key} not found in namespace ${this.namespace}`);
     }
-    return SuperJSON.serialize(snapshot);
+    return item.toStructure();
   }
 
   private queuePatch(patch: Patch) {
@@ -78,6 +78,7 @@ export class SyncNamespaceProvider {
 
 export class SyncItemProvider<T> {
   private value!: T;
+  private rawValue!: T;
 
   constructor(
     public readonly key: string,
@@ -101,15 +102,16 @@ export class SyncItemProvider<T> {
     }
   }
 
-  public toValue(): T {
-    // Return original unproxied value if needed, but since we are modifying state,
-    // we return the proxied value or we need a deep clone.
-    // Deep clone might be expensive, so we return the proxied value for now.
-    return this.value;
+  public get raw(): Readonly<T> {
+    return this.rawValue;
+  }
+
+  public toStructure(): SyncStateSnapshot {
+    return SuperJSON.serialize(this.rawValue);
   }
 
   private setValue(newVal: T) {
-    // If it's a replacement of the entire value, emit a root set patch
+    this.rawValue = newVal;
     this.onPatch({
       op: 'set',
       key: this.key,
@@ -117,7 +119,6 @@ export class SyncItemProvider<T> {
       value: newVal,
     });
 
-    // We proxy it so deep modifications trigger patches
     this.value = createDeepProxy(newVal, this.key, [], this.onPatch);
   }
 }

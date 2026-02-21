@@ -1,3 +1,5 @@
+import SuperJSON from 'superjson';
+
 export function isObject(val: unknown): val is object {
   return val !== null && typeof val === 'object';
 }
@@ -58,4 +60,8 @@ export function clearValue(current: unknown): void {
   if (current && typeof (current as Map<unknown, unknown>).clear === 'function') {
     (current as Map<unknown, unknown>).clear();
   }
+}
+
+export function deepStructureClone<T>(raw: T): T {
+  return SuperJSON.deserialize(SuperJSON.serialize(raw));
 }
